@@ -1,0 +1,242 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background: #0a0a0a;
+  color: #ededed;
+  height: 100vh;
+  overflow: hidden;
+}
+
+.app-container {
+  display: flex;
+  height: 100vh;
+}
+
+.left-panel {
+  flex: 1;
+  padding: 24px;
+  overflow-y: auto;
+  border-right: 1px solid #222;
+}
+
+.right-panel {
+  width: 420px;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.right-panel > div {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* Make CopilotKit chat scrollable */
+.right-panel [class*="copilotKitMessages"],
+.right-panel [class*="messages"] {
+  overflow-y: auto !important;
+  flex: 1 !important;
+}
+
+/* Auto-scroll behavior */
+.right-panel [class*="copilotKitMessages"] {
+  scroll-behavior: smooth;
+}
+
+.chat-wrapper {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.chat-wrapper > div {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.section {
+  margin-bottom: 24px;
+  padding: 16px;
+  background: #141414;
+  border: 1px solid #222;
+  border-radius: 12px;
+}
+
+.section h2 {
+  font-size: 14px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #888;
+  margin-bottom: 12px;
+}
+
+.state-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.state-item {
+  padding: 12px;
+  background: #1a1a1a;
+  border-radius: 8px;
+}
+
+.state-item .label {
+  font-size: 11px;
+  color: #666;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 4px;
+}
+
+.state-item .value {
+  font-size: 16px;
+  font-weight: 600;
+  color: #ededed;
+}
+
+.weather-card {
+  padding: 16px;
+  background: linear-gradient(135deg, #1a3a5c, #1a2a4c);
+  border-radius: 12px;
+  border: 1px solid #2a4a6c;
+}
+
+.weather-card h3 {
+  font-size: 18px;
+  margin-bottom: 8px;
+}
+
+.weather-card .temp {
+  font-size: 36px;
+  font-weight: 700;
+}
+
+.weather-card .condition {
+  color: #8ab4f8;
+  margin-top: 4px;
+}
+
+.chart-container {
+  padding: 16px;
+  background: #1a1a1a;
+  border-radius: 12px;
+  border: 1px solid #333;
+}
+
+.chart-container h3 {
+  font-size: 16px;
+  margin-bottom: 12px;
+}
+
+.bar-chart {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  height: 120px;
+}
+
+.bar {
+  flex: 1;
+  background: linear-gradient(180deg, #6366f1, #4f46e5);
+  border-radius: 4px 4px 0 0;
+  position: relative;
+  min-width: 24px;
+  transition: height 0.3s ease;
+}
+
+.bar .bar-label {
+  position: absolute;
+  bottom: -20px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 10px;
+  color: #888;
+  white-space: nowrap;
+}
+
+.bar .bar-value {
+  position: absolute;
+  top: -20px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 11px;
+  color: #aaa;
+  font-weight: 600;
+}
+
+.image-card {
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid #333;
+  background: #1a1a1a;
+}
+
+.image-card img {
+  width: 100%;
+  height: 200px;
+  object-fit: cover;
+}
+
+.image-card .caption {
+  padding: 12px;
+  font-size: 14px;
+  color: #aaa;
+}
+
+.loading-card {
+  padding: 16px;
+  background: #1a1a1a;
+  border-radius: 12px;
+  border: 1px solid #333;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: #888;
+}
+
+.spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid #333;
+  border-top-color: #6366f1;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.header {
+  padding: 16px 24px;
+  border-bottom: 1px solid #222;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.header h1 {
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.header .badge {
+  font-size: 11px;
+  padding: 2px 8px;
+  background: #1a2a1a;
+  color: #4ade80;
+  border-radius: 999px;
+  border: 1px solid #2a4a2a;
+}
