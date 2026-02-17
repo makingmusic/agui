@@ -33,6 +33,8 @@ export function AgentTools() {
       return JSON.stringify({ location, ...weather });
     },
     render: ({ status, args, result }) => {
+      console.log("Weather render status:", status, "args:", args, "result:", result);
+
       if (status === "inProgress" || status === "executing") {
         return (
           <div className="loading-card">
@@ -41,19 +43,44 @@ export function AgentTools() {
           </div>
         );
       }
+
       if (status === "complete" && result) {
-        const data = typeof result === "string" ? JSON.parse(result) : result;
-        return (
-          <div className="weather-card">
-            <h3>{data.location}</h3>
-            <div className="temp">{data.temp}°C</div>
-            <div className="condition">{data.condition}</div>
-            <div style={{ color: "#6b8ab8", fontSize: 13, marginTop: 4 }}>
-              Humidity: {data.humidity}%
+        try {
+          const data = typeof result === "string" ? JSON.parse(result) : result;
+          console.log("Weather data parsed:", data);
+          return (
+            <div className="weather-card">
+              <h3>{data.location || "Unknown Location"}</h3>
+              <div className="temp">{data.temp || "N/A"}°C</div>
+              <div className="condition">{data.condition || "N/A"}</div>
+              <div style={{ color: "#6b8ab8", fontSize: 13, marginTop: 4 }}>
+                Humidity: {data.humidity || "N/A"}%
+              </div>
             </div>
+          );
+        } catch (error) {
+          console.error("Weather parse error:", error);
+          return (
+            <div className="weather-card">
+              <h3>Error</h3>
+              <div style={{ color: "#ff6b6b", fontSize: 14 }}>
+                Failed to parse weather data
+              </div>
+            </div>
+          );
+        }
+      }
+
+      // Debug: show what status we're in if not complete
+      if (status) {
+        return (
+          <div className="loading-card">
+            <span style={{ color: "#ff6b6b" }}>Debug: Status is "{status}"</span>
           </div>
         );
       }
+
+      console.log("Weather render: returning null, status:", status);
       return null;
     },
   });
@@ -79,6 +106,7 @@ export function AgentTools() {
       return JSON.stringify({ title, data });
     },
     render: ({ status, args, result }) => {
+      console.log("Chart render status:", status, "args:", args, "result:", result);
       if (status === "inProgress" || status === "executing") {
         return (
           <div className="loading-card">
@@ -90,25 +118,32 @@ export function AgentTools() {
       if (status === "complete" && result) {
         const data = typeof result === "string" ? JSON.parse(result) : result;
         const items = data.data || [];
+        console.log("Chart data items:", items);
         const maxVal = Math.max(...items.map((d: { value: number }) => d.value), 1);
+        console.log("Chart maxVal:", maxVal);
         return (
           <div className="chart-container">
             <h3>{data.title}</h3>
             <div className="bar-chart">
-              {items.map((item: { label: string; value: number }, i: number) => (
-                <div
-                  key={i}
-                  className="bar"
-                  style={{ height: `${(item.value / maxVal) * 100}%` }}
-                >
-                  <span className="bar-value">{item.value}</span>
-                  <span className="bar-label">{item.label}</span>
-                </div>
-              ))}
+              {items.map((item: { label: string; value: number }, i: number) => {
+                const heightPercent = (item.value / maxVal) * 100;
+                console.log(`Bar ${i}: ${item.label} = ${item.value} (${heightPercent}%)`);
+                return (
+                  <div
+                    key={i}
+                    className="bar"
+                    style={{ height: `${heightPercent}%` }}
+                  >
+                    <span className="bar-value">{item.value}</span>
+                    <span className="bar-label">{item.label}</span>
+                  </div>
+                );
+              })}
             </div>
           </div>
         );
       }
+      console.log("Chart render: returning null");
       return null;
     },
   });
@@ -126,6 +161,8 @@ export function AgentTools() {
       return JSON.stringify({ caption, url });
     },
     render: ({ status, args, result }) => {
+      console.log("Image render status:", status, "args:", args, "result:", result);
+
       if (status === "inProgress" || status === "executing") {
         return (
           <div className="loading-card">
@@ -134,15 +171,37 @@ export function AgentTools() {
           </div>
         );
       }
+
       if (status === "complete" && result) {
-        const data = typeof result === "string" ? JSON.parse(result) : result;
+        try {
+          const data = typeof result === "string" ? JSON.parse(result) : result;
+          console.log("Image data parsed:", data);
+          return (
+            <div className="image-card">
+              <img src={data.url} alt={data.caption} />
+              <div className="caption">{data.caption}</div>
+            </div>
+          );
+        } catch (error) {
+          console.error("Image parse error:", error);
+          return (
+            <div className="loading-card">
+              <span style={{ color: "#ff6b6b" }}>Error loading image</span>
+            </div>
+          );
+        }
+      }
+
+      // Debug: show status if not complete
+      if (status) {
         return (
-          <div className="image-card">
-            <img src={data.url} alt={data.caption} />
-            <div className="caption">{data.caption}</div>
+          <div className="loading-card">
+            <span style={{ color: "#ff6b6b" }}>Debug: Status is "{status}"</span>
           </div>
         );
       }
+
+      console.log("Image render: returning null");
       return null;
     },
   });

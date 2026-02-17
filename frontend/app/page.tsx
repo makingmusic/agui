@@ -1,6 +1,5 @@
 "use client";
 
-import dynamic from "next/dynamic";
 import { CopilotKit } from "@copilotkit/react-core";
 import { CopilotChat } from "@copilotkit/react-ui";
 import "@copilotkit/react-ui/styles.css";
@@ -12,7 +11,7 @@ function AppContent() {
   return (
     <CopilotKit runtimeUrl="/api/copilotkit" agent="claude_agent">
       <AgentTools />
-      <div className="app-container">
+      <div className="app-container" suppressHydrationWarning>
         <div className="left-panel">
           <div className="header">
             <h1>AG-UI POC</h1>
@@ -55,10 +54,22 @@ export default function Home() {
 
   useEffect(() => {
     setMounted(true);
+
+    // Suppress custom element re-registration errors during hot reload
+    const originalCustomElementsDefine = window.customElements.define;
+    window.customElements.define = function(name, constructor, options) {
+      if (!customElements.get(name)) {
+        originalCustomElementsDefine.call(customElements, name, constructor, options);
+      }
+    };
   }, []);
 
   if (!mounted) {
-    return null;
+    return (
+      <div className="app-container" style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100vh", color: "#888" }}>
+        <div className="spinner" />
+      </div>
+    );
   }
 
   return <AppContent />;

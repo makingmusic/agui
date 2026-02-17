@@ -132,6 +132,19 @@ async def run_agent(input_data: RunAgentInput, request: Request):
     accept_header = request.headers.get("accept", "")
     encoder = EventEncoder(accept=accept_header)
 
+    # Debug logging
+    print(f"\n=== NEW REQUEST ===")
+    print(f"Thread ID: {input_data.thread_id}")
+    print(f"Run ID: {input_data.run_id}")
+    print(f"Number of messages: {len(input_data.messages)}")
+    print(f"Number of tools: {len(input_data.tools) if input_data.tools else 0}")
+    if input_data.messages:
+        for i, msg in enumerate(input_data.messages[-3:]):  # Show last 3 messages
+            role = getattr(msg, "role", "unknown")
+            content = getattr(msg, "content", "")
+            content_preview = str(content)[:100] if content else ""
+            print(f"  Message {i}: role={role}, content={content_preview}")
+
     async def event_generator() -> AsyncGenerator[bytes, None]:
         try:
             # 1. Run started
@@ -160,6 +173,9 @@ async def run_agent(input_data: RunAgentInput, request: Request):
             # Prepare Claude API call
             anthropic_messages = convert_messages(input_data.messages)
             anthropic_tools = convert_tools(input_data.tools)
+
+            print(f"Converted messages: {len(anthropic_messages)}")
+            print(f"Converted tools: {[t['name'] for t in anthropic_tools] if anthropic_tools else []}")
 
             if not anthropic_messages:
                 anthropic_messages = [{"role": "user", "content": "Hello"}]
