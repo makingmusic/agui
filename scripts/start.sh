@@ -9,12 +9,20 @@ PID_DIR="$ROOT_DIR/scripts/.pids"
 
 mkdir -p "$PID_DIR"
 
-# ── Check for ANTHROPIC_API_KEY ─────────────────────────────────────────────
+# ── Load API key from ~/.env if not already set ─────────────────────────────
+if [ -z "$ANTHROPIC_API_KEY" ] && [ -f "$HOME/.env" ]; then
+  echo "  Loading ANTHROPIC_API_KEY from ~/.env..."
+  source "$HOME/.env"
+fi
+
 if [ -z "$ANTHROPIC_API_KEY" ]; then
   echo ""
   echo "  ERROR: ANTHROPIC_API_KEY is not set."
   echo ""
-  echo "  Export your key before running:"
+  echo "  Either create ~/.env with:"
+  echo "    export ANTHROPIC_API_KEY=sk-ant-..."
+  echo ""
+  echo "  Or export it directly before running:"
   echo "    export ANTHROPIC_API_KEY=sk-ant-..."
   echo ""
   exit 1

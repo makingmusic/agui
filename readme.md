@@ -80,11 +80,13 @@ agui/
 
 ### 1. Set your API key
 
+Create a `~/.env` file with your Anthropic API key:
+
 ```bash
-export ANTHROPIC_API_KEY=sk-ant-...
+echo 'export ANTHROPIC_API_KEY=sk-ant-...' > ~/.env
 ```
 
-> Tip: add this line to your `~/.zshrc` or `~/.bashrc` so you don't have to re-enter it every session.
+The start script automatically sources `~/.env` if `ANTHROPIC_API_KEY` is not already in your environment. Alternatively, you can export the key directly in your shell or add it to your `~/.zshrc` / `~/.bashrc`.
 
 ### 2. Start both services
 
@@ -190,7 +192,7 @@ The backend can push arbitrary state to the frontend using `StateSnapshotEvent` 
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `ANTHROPIC_API_KEY` | _(required)_ | Your Anthropic API key |
+| `ANTHROPIC_API_KEY` | _(required)_ | Your Anthropic API key (auto-loaded from `~/.env` if present) |
 | `AGENT_URL` | `http://localhost:8000` | Backend URL used by the Next.js API route |
 
 Set `AGENT_URL` as an environment variable or in a `frontend/.env.local` file if you run the backend on a different host or port.
