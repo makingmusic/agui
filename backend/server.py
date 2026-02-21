@@ -1,34 +1,17 @@
+import asyncio
 import json
 import uuid
 import time
-from typing import AsyncGenerator
+from typing import AsyncGenerator, Optional
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
 
-from ag_ui.core import (
-    RunAgentInput,
-    EventType,
-    RunStartedEvent,
-    RunFinishedEvent,
-    RunErrorEvent,
-    StepStartedEvent,
-    StepFinishedEvent,
-    TextMessageStartEvent,
-    TextMessageContentEvent,
-    TextMessageEndEvent,
-    ToolCallStartEvent,
-    ToolCallArgsEvent,
-    ToolCallEndEvent,
-    StateSnapshotEvent,
-    StateDeltaEvent,
-    CustomEvent,
-)
-from ag_ui.encoder import EventEncoder
 from anthropic import AsyncAnthropic
 
-app = FastAPI(title="AG-UI Claude Backend")
+app = FastAPI(title="A2UI Demo Backend")
 
 app.add_middleware(
     CORSMiddleware,
@@ -39,253 +22,174 @@ app.add_middleware(
 
 client = AsyncAnthropic()
 
-SYSTEM_PROMPT = """You are a helpful assistant powering a dynamic UI demo.
+A2UI_SYSTEM_PROMPT = r"""You are an A2UI (Agent-to-User Interface) agent. You generate complete, interactive UIs as A2UI JSONL messages. You do NOT chat — you BUILD interfaces.
 
-You have access to frontend tools that render UI components. Use them when appropriate:
-- get_weather: Show weather for a city
-- create_chart: Display a bar chart with data
-- show_image: Display an image card
+When the user describes a UI they want, you respond with a sequence of A2UI JSONL messages (one JSON object per line). The client renders these into native React components in real-time.
 
-When the user asks about weather, charts, images, or visual content, use the appropriate tool.
-Be concise and helpful."""
+## A2UI Protocol v0.8
+
+### Message Types
+
+1. **beginRendering** — Start a new surface
+```json
+{"type":"beginRendering","surfaceId":"<id>","rootComponentId":"<id>"}
+```
+
+2. **surfaceUpdate** — Add/update components on the surface
+```json
+{"type":"surfaceUpdate","surfaceId":"<id>","components":[...array of components...]}
+```
+
+3. **dataModelUpdate** — Set data values that components can bind to
+```json
+{"type":"dataModelUpdate","surfaceId":"<id>","data":{"key":"value",...}}
+```
+
+### Component Schema
+
+Each component has:
+- `id` (string) — unique identifier
+- `type` (string) — one of the component types below
+- `children` (array, optional) — child component IDs
+- Plus type-specific properties
+
+### Component Catalog
+
+**Layout:**
+- `Card` — Container with optional shadow. Props: `title` (string, optional)
+- `Row` — Horizontal flex layout. Props: `distribution` ("equal"|"packed"|"spaceBetween"), `alignment` ("start"|"center"|"end"), `gap` (number, default 8)
+- `Column` — Vertical flex layout. Props: `distribution`, `alignment`, `gap` (number, default 8)
+- `Divider` — Visual separator. Props: `direction` ("horizontal"|"vertical")
+- `Tabs` — Tabbed container. Props: `tabs` (array of {label, contentId})
+
+**Content:**
+- `Text` — Text display. Props: `content` (string), `usageHint` ("h1"|"h2"|"h3"|"h4"|"h5"|"body"|"caption"|"code")
+- `Image` — Image display. Props: `url` (string), `alt` (string), `fit` ("cover"|"contain"|"fill")
+- `Icon` — Icon display. Props: `name` (string — use common icon names like "mail", "phone", "user", "star", "heart", "check", "calendar", "clock", "map-pin", "globe", "search", "settings", "bell", "home", "arrow-right", "plus", "minus", "edit", "trash", "download", "upload", "link", "send", "menu", "close", "chevron-right", "chevron-down", "info", "warning", "error", "success", "airplane", "hotel", "restaurant", "coffee", "shopping-cart", "credit-card", "briefcase", "code", "terminal", "database", "cloud", "sun", "moon")
+
+**Inputs:**
+- `TextField` — Text input. Props: `label` (string), `placeholder` (string), `inputType` ("text"|"email"|"tel"|"number"|"password"|"date"|"time"|"url"), `required` (boolean), `boundPath` (string — data model path)
+- `Button` — Clickable button. Props: `label` (string), `variant` ("primary"|"secondary"|"ghost"|"danger"), `actionName` (string), `icon` (string, optional)
+- `CheckBox` — Checkbox toggle. Props: `label` (string), `boundPath` (string)
+- `Slider` — Range slider. Props: `label` (string), `min` (number), `max` (number), `step` (number), `boundPath` (string)
+- `MultipleChoice` — Selection from options. Props: `label` (string), `options` (array of {value, label}), `mode` ("single"|"multi"|"chip"), `boundPath` (string)
+
+**Container:**
+- `List` — Scrollable list of items. Props: `maxHeight` (number, optional)
+
+## Rules
+
+1. Always start with a `beginRendering` message.
+2. Then send `surfaceUpdate` messages with ALL components. You can send multiple surfaceUpdate messages to stream the UI progressively.
+3. Optionally send `dataModelUpdate` to set initial form values.
+4. Every component must have a unique `id`.
+5. Use `children` arrays with component IDs to build the tree. The root component (referenced by `rootComponentId`) should be a Card or Column that contains all other components.
+6. Make UIs look professional and well-structured. Use proper spacing, headers, and logical grouping.
+7. For forms, group related fields and include a submit button with an `actionName`.
+8. Use appropriate `usageHint` for text hierarchy (h1 for titles, h2 for sections, body for content, caption for hints).
+9. Output ONLY valid JSONL — one JSON object per line, no markdown, no explanation, no extra text.
+10. Build rich, complete UIs — not minimal stubs. Include realistic placeholder text, proper labels, and logical layouts.
+11. Use icons where they add visual clarity (e.g., next to section headers, in buttons).
+
+## Handling Actions
+
+When you receive an action event (user clicked a button, submitted a form), respond with updated UI. For example, show a success message, update values, or transition to a new view.
+
+## Example Output
+
+For "Build a simple contact form":
+
+{"type":"beginRendering","surfaceId":"s1","rootComponentId":"root"}
+{"type":"surfaceUpdate","surfaceId":"s1","components":[{"id":"root","type":"Column","gap":24,"children":["header","form-card"]},{"id":"header","type":"Text","content":"Contact Us","usageHint":"h1"},{"id":"form-card","type":"Card","title":"Your Information","children":["form-fields","submit-row"]},{"id":"form-fields","type":"Column","gap":16,"children":["name-field","email-field","message-field"]},{"id":"name-field","type":"TextField","label":"Full Name","placeholder":"John Doe","inputType":"text","required":true,"boundPath":"/contact/name"},{"id":"email-field","type":"TextField","label":"Email Address","placeholder":"john@example.com","inputType":"email","required":true,"boundPath":"/contact/email"},{"id":"message-field","type":"TextField","label":"Message","placeholder":"How can we help you?","inputType":"text","required":false,"boundPath":"/contact/message"},{"id":"submit-row","type":"Row","distribution":"packed","alignment":"end","children":["submit-btn"]},{"id":"submit-btn","type":"Button","label":"Send Message","variant":"primary","actionName":"submitContact","icon":"send"}]}
+{"type":"dataModelUpdate","surfaceId":"s1","data":{"contact":{"name":"","email":"","message":""}}}
+"""
+
+ACTION_FOLLOW_UP_PROMPT = """The user performed an action on the UI you built.
+
+Action: {action_name}
+Current form data: {form_data}
+Surface ID: {surface_id}
+
+Respond with A2UI JSONL to update the UI. For example:
+- Show a success confirmation
+- Show validation errors
+- Transition to a new view
+
+Remember: output ONLY valid A2UI JSONL, one JSON object per line. Reuse the same surfaceId. You may reuse existing component IDs to update them, or use new IDs for new components."""
 
 
-def convert_messages(messages):
-    """Convert AG-UI messages to Anthropic format."""
-    result = []
-    for msg in messages:
-        role = getattr(msg, "role", None)
-        if role in ("system", "developer"):
-            continue
-
-        content = getattr(msg, "content", None)
-
-        if role == "tool":
-            tool_call_id = getattr(msg, "tool_call_id", None)
-            if tool_call_id:
-                result.append({
-                    "role": "user",
-                    "content": [{
-                        "type": "tool_result",
-                        "tool_use_id": tool_call_id,
-                        "content": content or "",
-                    }],
-                })
-        elif role == "assistant":
-            blocks = []
-            if content:
-                if isinstance(content, str):
-                    blocks.append({"type": "text", "text": content})
-                elif isinstance(content, list):
-                    for item in content:
-                        if hasattr(item, "text"):
-                            blocks.append({"type": "text", "text": item.text})
-
-            tool_calls = getattr(msg, "tool_calls", None)
-            if tool_calls:
-                for tc in tool_calls:
-                    func = getattr(tc, "function", tc)
-                    blocks.append({
-                        "type": "tool_use",
-                        "id": tc.id,
-                        "name": func.name,
-                        "input": json.loads(func.arguments) if isinstance(func.arguments, str) else func.arguments,
-                    })
-            result.append({"role": "assistant", "content": blocks or content or ""})
-        else:
-            # user message
-            if isinstance(content, str):
-                result.append({"role": "user", "content": content})
-            elif isinstance(content, list):
-                text_parts = []
-                for item in content:
-                    if hasattr(item, "text"):
-                        text_parts.append(item.text)
-                    elif isinstance(item, str):
-                        text_parts.append(item)
-                result.append({"role": "user", "content": " ".join(text_parts) if text_parts else ""})
-            elif content:
-                result.append({"role": "user", "content": str(content)})
-
-    return result
+class A2UIRequest(BaseModel):
+    message: str
+    surfaceId: Optional[str] = None
+    action: Optional[dict] = None
+    formData: Optional[dict] = None
 
 
-def convert_tools(tools):
-    """Convert AG-UI tool definitions to Anthropic format."""
-    if not tools:
-        return []
-    result = []
-    for tool in tools:
-        schema = tool.parameters if hasattr(tool, "parameters") else {}
-        if isinstance(schema, str):
-            schema = json.loads(schema)
-        result.append({
-            "name": tool.name,
-            "description": getattr(tool, "description", "") or "",
-            "input_schema": schema,
-        })
-    return result
+@app.post("/a2ui")
+async def a2ui_endpoint(req: A2UIRequest, request: Request):
+    surface_id = req.surfaceId or f"surface-{uuid.uuid4().hex[:8]}"
 
+    if req.action:
+        user_message = ACTION_FOLLOW_UP_PROMPT.format(
+            action_name=req.action.get("name", "unknown"),
+            form_data=json.dumps(req.formData or {}, indent=2),
+            surface_id=surface_id,
+        )
+    else:
+        user_message = req.message
 
-@app.post("/")
-async def run_agent(input_data: RunAgentInput, request: Request):
-    accept_header = request.headers.get("accept", "")
-    encoder = EventEncoder(accept=accept_header)
-
-    # Debug logging
-    print(f"\n=== NEW REQUEST ===")
-    print(f"Thread ID: {input_data.thread_id}")
-    print(f"Run ID: {input_data.run_id}")
-    print(f"Number of messages: {len(input_data.messages)}")
-    print(f"Number of tools: {len(input_data.tools) if input_data.tools else 0}")
-    if input_data.messages:
-        for i, msg in enumerate(input_data.messages[-3:]):  # Show last 3 messages
-            role = getattr(msg, "role", "unknown")
-            content = getattr(msg, "content", "")
-            content_preview = str(content)[:100] if content else ""
-            print(f"  Message {i}: role={role}, content={content_preview}")
-
-    async def event_generator() -> AsyncGenerator[bytes, None]:
+    async def generate() -> AsyncGenerator[str, None]:
         try:
-            # 1. Run started
-            yield encoder.encode(RunStartedEvent(
-                type=EventType.RUN_STARTED,
-                thread_id=input_data.thread_id,
-                run_id=input_data.run_id,
-            ))
+            async with client.messages.stream(
+                model="claude-sonnet-4-20250514",
+                max_tokens=8192,
+                system=A2UI_SYSTEM_PROMPT,
+                messages=[{"role": "user", "content": user_message}],
+            ) as stream:
+                buffer = ""
+                async for text in stream.text_stream:
+                    buffer += text
+                    # Try to extract complete JSONL lines
+                    while "\n" in buffer:
+                        line, buffer = buffer.split("\n", 1)
+                        line = line.strip()
+                        if not line:
+                            continue
+                        # Validate it's valid JSON
+                        try:
+                            parsed = json.loads(line)
+                            # Inject surfaceId if missing
+                            if "surfaceId" not in parsed and "type" in parsed:
+                                parsed["surfaceId"] = surface_id
+                            yield f"data: {json.dumps(parsed)}\n\n"
+                        except json.JSONDecodeError:
+                            # Not valid JSON yet, skip
+                            pass
 
-            # 2. State snapshot
-            yield encoder.encode(StateSnapshotEvent(
-                type=EventType.STATE_SNAPSHOT,
-                snapshot={
-                    "messageCount": len(input_data.messages),
-                    "lastQuery": "",
-                    "agentStatus": "processing",
-                },
-            ))
+                # Process any remaining buffer
+                remaining = buffer.strip()
+                if remaining:
+                    try:
+                        parsed = json.loads(remaining)
+                        if "surfaceId" not in parsed and "type" in parsed:
+                            parsed["surfaceId"] = surface_id
+                        yield f"data: {json.dumps(parsed)}\n\n"
+                    except json.JSONDecodeError:
+                        pass
 
-            # 3. Step started
-            yield encoder.encode(StepStartedEvent(
-                type=EventType.STEP_STARTED,
-                step_name="claude_inference",
-            ))
-
-            # Prepare Claude API call
-            anthropic_messages = convert_messages(input_data.messages)
-            anthropic_tools = convert_tools(input_data.tools)
-
-            print(f"Converted messages: {len(anthropic_messages)}")
-            print(f"Converted tools: {[t['name'] for t in anthropic_tools] if anthropic_tools else []}")
-
-            if not anthropic_messages:
-                anthropic_messages = [{"role": "user", "content": "Hello"}]
-
-            create_kwargs = {
-                "model": "claude-sonnet-4-20250514",
-                "max_tokens": 4096,
-                "system": SYSTEM_PROMPT,
-                "messages": anthropic_messages,
-            }
-            if anthropic_tools:
-                create_kwargs["tools"] = anthropic_tools
-
-            # 4. Stream from Claude
-            message_id = str(uuid.uuid4())
-            text_started = False
-            current_tool_id = None
-
-            async with client.messages.stream(**create_kwargs) as stream:
-                async for event in stream:
-                    if event.type == "content_block_start":
-                        block = event.content_block
-                        if block.type == "text":
-                            if not text_started:
-                                yield encoder.encode(TextMessageStartEvent(
-                                    type=EventType.TEXT_MESSAGE_START,
-                                    message_id=message_id,
-                                    role="assistant",
-                                ))
-                                text_started = True
-
-                        elif block.type == "tool_use":
-                            current_tool_id = block.id
-                            yield encoder.encode(ToolCallStartEvent(
-                                type=EventType.TOOL_CALL_START,
-                                tool_call_id=block.id,
-                                tool_call_name=block.name,
-                                parent_message_id=message_id,
-                            ))
-
-                    elif event.type == "content_block_delta":
-                        delta = event.delta
-                        if delta.type == "text_delta":
-                            yield encoder.encode(TextMessageContentEvent(
-                                type=EventType.TEXT_MESSAGE_CONTENT,
-                                message_id=message_id,
-                                delta=delta.text,
-                            ))
-
-                        elif delta.type == "input_json_delta":
-                            if current_tool_id:
-                                yield encoder.encode(ToolCallArgsEvent(
-                                    type=EventType.TOOL_CALL_ARGS,
-                                    tool_call_id=current_tool_id,
-                                    delta=delta.partial_json,
-                                ))
-
-                    elif event.type == "content_block_stop":
-                        if current_tool_id is not None:
-                            yield encoder.encode(ToolCallEndEvent(
-                                type=EventType.TOOL_CALL_END,
-                                tool_call_id=current_tool_id,
-                            ))
-                            current_tool_id = None
-
-            # Close text message if opened
-            if text_started:
-                yield encoder.encode(TextMessageEndEvent(
-                    type=EventType.TEXT_MESSAGE_END,
-                    message_id=message_id,
-                ))
-
-            # 5. State delta
-            last_query = ""
-            for msg in reversed(input_data.messages):
-                content = getattr(msg, "content", None)
-                if getattr(msg, "role", None) == "user" and content:
-                    last_query = content if isinstance(content, str) else str(content)
-                    break
-
-            yield encoder.encode(StateDeltaEvent(
-                type=EventType.STATE_DELTA,
-                delta=[
-                    {"op": "replace", "path": "/messageCount", "value": len(input_data.messages) + 1},
-                    {"op": "replace", "path": "/lastQuery", "value": last_query},
-                    {"op": "replace", "path": "/agentStatus", "value": "idle"},
-                ],
-            ))
-
-            # 6. Step finished + Run finished
-            yield encoder.encode(StepFinishedEvent(
-                type=EventType.STEP_FINISHED,
-                step_name="claude_inference",
-            ))
-
-            yield encoder.encode(RunFinishedEvent(
-                type=EventType.RUN_FINISHED,
-                thread_id=input_data.thread_id,
-                run_id=input_data.run_id,
-            ))
+            yield "data: {\"type\":\"done\"}\n\n"
 
         except Exception as e:
-            yield encoder.encode(RunErrorEvent(
-                type=EventType.RUN_ERROR,
-                message=str(e),
-            ))
+            yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
 
     return StreamingResponse(
-        event_generator(),
-        media_type=encoder.get_content_type(),
+        generate(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
     )
 
 

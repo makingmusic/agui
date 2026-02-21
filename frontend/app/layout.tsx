@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "AG-UI POC",
-  description: "Dynamic LLM-driven UI with AG-UI protocol",
+  title: "A2UI Demo",
+  description: "Agent-to-User Interface: AI agents that build UIs",
 };
 
 export default function RootLayout({

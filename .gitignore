@@ -41,3 +41,4 @@ out/
 # Temporary files
 *.tmp
 x.txt
+backend/.venv/

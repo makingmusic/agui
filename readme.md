@@ -1,41 +1,49 @@
-# AG-UI POC — Dynamic LLM-Driven UI
+# A2UI Demo — Agent-Driven UI Showcase
 
-A proof-of-concept that uses the [AG-UI protocol](https://github.com/ag-ui-protocol/ag-ui) to let an LLM (Claude) drive a live React UI in real time. The backend streams structured events over SSE; the frontend renders them as chat messages, tool-call cards, and a live shared-state panel — all without any page refreshes.
+A demo that showcases the **A2UI (Agent-to-User Interface)** concept: instead of chatting, the AI agent **builds entire interactive UIs** from natural language descriptions. You describe what you want, and the agent streams a complete React interface into existence — forms, dashboards, cards, menus — rendered in real-time.
 
 ---
 
-## What is AG-UI?
+## How It Works
 
-AG-UI is an open protocol that standardises how AI agents communicate with front-end applications. Instead of returning a plain text response, the agent emits a stream of typed events (`TextMessageStart`, `ToolCallStart`, `StateSnapshot`, etc.). The frontend knows exactly what each event means and can render rich UI for each one.
+The user types a description like "Build a contact form" and the agent responds with **A2UI JSONL** — a stream of declarative JSON messages that the frontend renders as native React components. No chat bubbles. No markdown. Real, interactive UI.
 
-Think of it as "SSE with a schema" — a common language between your AI backend and your React components.
+```
+User Input → Python Backend (Claude + A2UI system prompt)
+           → Streams A2UI JSONL via SSE
+           → React Frontend A2UI Renderer
+           → Native React components rendered from declarative JSON
+           → User interactions sent back as actions
+```
 
 ---
 
 ## Architecture
 
 ```
-┌─────────────────────────────┐     AG-UI events (SSE)     ┌──────────────────────────┐
-│  Python Backend (port 8000) │ ◄─────────────────────────► │  Next.js Frontend        │
-│  FastAPI + ag-ui-protocol   │                             │  CopilotKit + React      │
-│  + Anthropic SDK            │                             │  (port 3000)             │
-└─────────────────────────────┘                             └──────────────────────────┘
+┌─────────────────────────────┐     A2UI JSONL (SSE)          ┌──────────────────────────┐
+│  Python Backend (port 8000) │ ──────────────────────────►   │  Next.js Frontend        │
+│  FastAPI + Anthropic SDK    │                               │  A2UI Renderer + React   │
+│  POST /a2ui                 │ ◄──────────────────────────   │  (port 3000)             │
+└─────────────────────────────┘     Actions (POST)            └──────────────────────────┘
          │                                                            │
          ▼                                                            ▼
    Anthropic Claude API                                    Browser renders:
-   (streaming messages)                                    - Token-by-token chat
-                                                           - Tool call UI cards
-                                                           - Live shared state panel
-                                                           - Activity indicators
+   (streaming text → JSONL)                                - Interactive forms
+                                                           - Dashboards & cards
+                                                           - Menus & layouts
+                                                           - Real-time streaming
 ```
 
 **Request flow:**
 
-1. User types a message in the chat UI.
-2. CopilotKit sends the conversation to the Next.js API route `/api/copilotkit`.
-3. That route proxies it to the Python backend at `http://localhost:8000`.
-4. The backend calls Claude via the Anthropic SDK and maps each Claude stream event to an AG-UI event.
-5. Events are streamed back through the chain and CopilotKit renders them live.
+1. User types a UI description in the prompt bar (or clicks an example chip).
+2. Frontend POSTs to `http://localhost:8000/a2ui` with the message.
+3. Backend calls Claude with an A2UI system prompt that teaches it the component catalog.
+4. Claude generates A2UI JSONL — one JSON object per line.
+5. Backend streams each line as an SSE `data:` event.
+6. Frontend parses each message and builds the React component tree in real-time.
+7. User interactions (button clicks) are sent back as actions for Claude to respond to.
 
 ---
 
@@ -44,24 +52,48 @@ Think of it as "SSE with a schema" — a common language between your AI backend
 ```
 agui/
 ├── backend/
-│   ├── server.py          # FastAPI app — AG-UI event streaming + Claude integration
+│   ├── server.py          # FastAPI app — /a2ui endpoint, A2UI system prompt, SSE streaming
 │   └── requirements.txt   # Python dependencies
 ├── frontend/
 │   ├── app/
-│   │   ├── layout.tsx               # Root HTML layout
-│   │   ├── page.tsx                 # Main page: left info panel + right chat panel
-│   │   ├── globals.css              # Global styles
-│   │   └── api/copilotkit/route.ts  # Next.js API route — proxies to Python backend
-│   ├── components/
-│   │   ├── AgentTools.tsx   # Frontend tool registrations (weather, chart, image)
-│   │   └── StatePanel.tsx   # Live shared-state display
+│   │   ├── layout.tsx     # Root HTML layout
+│   │   ├── page.tsx       # Main page: prompt bar, surface area, JSONL inspector
+│   │   └── globals.css    # Global styles (dark theme)
+│   ├── lib/a2ui/
+│   │   ├── types.ts       # A2UI protocol TypeScript types
+│   │   ├── store.ts       # Component buffer, data model, state management
+│   │   └── renderer.tsx   # React renderer — walks component tree, dispatches to widgets
+│   ├── components/a2ui/
+│   │   └── components.tsx # All 14 A2UI component implementations
 │   ├── package.json
 │   └── next.config.js
 ├── scripts/
-│   ├── start.sh   # Start both services
-│   └── stop.sh    # Stop both services
+│   ├── start.sh           # Start both services
+│   └── stop.sh            # Stop both services
 └── readme.md
 ```
+
+---
+
+## A2UI Protocol
+
+The agent communicates with the frontend using three message types:
+
+| Message | Purpose |
+|---------|---------|
+| `beginRendering` | Declares a new surface with a root component ID |
+| `surfaceUpdate` | Adds or updates components on the surface |
+| `dataModelUpdate` | Sets bound data values (form state, etc.) |
+
+### Component Catalog
+
+| Category | Components |
+|----------|-----------|
+| **Layout** | `Card`, `Row`, `Column`, `Tabs`, `Divider`, `List` |
+| **Content** | `Text`, `Image`, `Icon` |
+| **Inputs** | `TextField`, `Button`, `CheckBox`, `Slider`, `MultipleChoice` |
+
+Components reference each other by ID via `children` arrays, forming a tree rooted at the `rootComponentId`. Input components bind to the data model via `boundPath` (e.g., `"/contact/name"`).
 
 ---
 
@@ -70,6 +102,7 @@ agui/
 | Tool | Version | Notes |
 |------|---------|-------|
 | Python | 3.9+ | `python3 --version` |
+| uv | latest | `uv --version` — [install](https://docs.astral.sh/uv/) |
 | Node.js | 18+ | `node --version` |
 | npm | 9+ | comes with Node |
 | Anthropic API key | — | [Get one here](https://console.anthropic.com/) |
@@ -86,7 +119,7 @@ Create a `~/.env` file with your Anthropic API key:
 echo 'export ANTHROPIC_API_KEY=sk-ant-...' > ~/.env
 ```
 
-The start script automatically sources `~/.env` if `ANTHROPIC_API_KEY` is not already in your environment. Alternatively, you can export the key directly in your shell or add it to your `~/.zshrc` / `~/.bashrc`.
+The start script automatically sources `~/.env` if `ANTHROPIC_API_KEY` is not already in your environment.
 
 ### 2. Start both services
 
@@ -116,15 +149,12 @@ http://localhost:3000
 
 ## Running Services Manually
 
-If you prefer to run each service yourself (e.g. to see logs directly in the terminal):
-
 **Backend:**
 ```bash
 cd backend
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-uvicorn server:app --reload --port 8000
+uv venv .venv
+uv pip install --python .venv/bin/python -r requirements.txt
+.venv/bin/uvicorn server:app --reload --port 8000
 ```
 
 **Frontend** (in a separate terminal):
@@ -136,55 +166,33 @@ npm run dev
 
 ---
 
-## What You Can Demo
+## Demo Scenarios
 
-Open the chat on the right side and try these prompts:
+The app includes pre-built example chips. Click any of them or type your own:
 
-| What to ask | What happens |
-|-------------|-------------|
-| "What is the capital of Japan?" | Streams a text response token-by-token |
-| "What's the weather in Tokyo?" | Renders an inline weather card via the `get_weather` tool |
-| "Show me a chart of quarterly revenue" | Renders an inline bar chart via the `create_chart` tool |
-| "Show me an image of a sunset" | Renders an inline image card via the `show_image` tool |
-| Any follow-up message | Watch the **Shared State** panel update in real time (message count, last query, status) |
+| Prompt | What gets built |
+|--------|----------------|
+| "Build a contact form with name, email, phone, and preferred contact method" | Multi-field form with text inputs, radio buttons, and a submit button |
+| "Create a restaurant menu with appetizers, mains, and desserts" | Tabbed or sectioned menu with cards, prices, and descriptions |
+| "Show me a project dashboard with task status, team members, and deadlines" | Dashboard layout with cards, lists, and status indicators |
+| "Make a flight booking form with departure, arrival, dates, and passenger count" | Form with date pickers, text fields, sliders, and booking button |
+| "Design a user profile card with avatar, bio, and social links" | Profile card with image, text sections, and link buttons |
+
+### Interacting with generated UIs
+
+- **Form fields** are fully interactive — type in text fields, toggle checkboxes, move sliders
+- **Buttons with actions** send the current form data back to Claude, which responds with an updated UI (e.g., a success confirmation)
+- The **JSONL Stream Inspector** (bottom panel) shows every protocol message in real-time
 
 ---
 
-## Key Concepts for New Developers
+## The App Layout
 
-### AG-UI Events
+The page has three areas:
 
-The backend emits a sequence of typed events per request. Here is what a typical turn looks like:
-
-```
-RunStartedEvent        ← marks the start of a new agent run
-StateSnapshotEvent     ← pushes the current shared state to the frontend
-StepStartedEvent       ← logical step inside the run (e.g. "claude_inference")
-  TextMessageStartEvent    ← Claude is about to stream a text response
-  TextMessageContentEvent  ← each streamed token
-  TextMessageEndEvent      ← text stream complete
-  ToolCallStartEvent       ← Claude decided to call a tool
-  ToolCallArgsEvent        ← streaming the JSON arguments for the tool
-  ToolCallEndEvent         ← tool call arguments complete
-StateDeltaEvent        ← patches the shared state (JSON Patch operations)
-StepFinishedEvent
-RunFinishedEvent       ← marks the end of the run
-```
-
-If something goes wrong at any point, a `RunErrorEvent` is emitted instead.
-
-### Frontend Tools (CopilotKit)
-
-Tools are registered in the frontend (`AgentTools.tsx`) using the `useCopilotAction` hook. When Claude decides to call a tool, CopilotKit:
-
-1. Calls the `handler` function with the parsed arguments.
-2. Renders the `render` component inline in the chat, showing a loading state while the handler runs, then the result card.
-
-The backend does **not** execute tools — it only emits `ToolCall*` events. The frontend is responsible for the actual tool logic and rendering.
-
-### Shared State
-
-The backend can push arbitrary state to the frontend using `StateSnapshotEvent` (full replace) and `StateDeltaEvent` (JSON Patch). The `StatePanel` component subscribes to this state via `useCoAgent` and renders it live.
+1. **Prompt Bar** (top) — Text input + example chips
+2. **Rendered Surface** (center) — Where the A2UI-generated UI appears, streamed in real-time
+3. **JSONL Stream Inspector** (collapsible bottom) — Raw protocol messages for educational purposes
 
 ---
 
@@ -193,9 +201,6 @@ The backend can push arbitrary state to the frontend using `StateSnapshotEvent` 
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `ANTHROPIC_API_KEY` | _(required)_ | Your Anthropic API key (auto-loaded from `~/.env` if present) |
-| `AGENT_URL` | `http://localhost:8000` | Backend URL used by the Next.js API route |
-
-Set `AGENT_URL` as an environment variable or in a `frontend/.env.local` file if you run the backend on a different host or port.
 
 ---
 

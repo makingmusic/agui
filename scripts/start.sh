@@ -33,25 +33,21 @@ echo "Starting backend (FastAPI on port 8000)..."
 
 BACKEND_DIR="$ROOT_DIR/backend"
 
-# Create and activate a venv if one doesn't exist yet
+# Create a venv if one doesn't exist yet
 if [ ! -d "$BACKEND_DIR/.venv" ]; then
   echo "  Creating Python virtual environment..."
-  python3 -m venv "$BACKEND_DIR/.venv"
+  uv venv "$BACKEND_DIR/.venv"
 fi
 
-source "$BACKEND_DIR/.venv/bin/activate"
-
-# Install dependencies if needed
-pip install -q -r "$BACKEND_DIR/requirements.txt"
+# Install dependencies
+uv pip install --quiet --python "$BACKEND_DIR/.venv/bin/python" -r "$BACKEND_DIR/requirements.txt"
 
 # Launch uvicorn in the background, write PID
 cd "$BACKEND_DIR"
-uvicorn server:app --host 0.0.0.0 --port 8000 > "$ROOT_DIR/scripts/backend.log" 2>&1 &
+"$BACKEND_DIR/.venv/bin/uvicorn" server:app --host 0.0.0.0 --port 8000 > "$ROOT_DIR/scripts/backend.log" 2>&1 &
 BACKEND_PID=$!
 echo "$BACKEND_PID" > "$PID_DIR/backend.pid"
 echo "  Backend PID: $BACKEND_PID  (logs: scripts/backend.log)"
-
-deactivate
 
 # ── Frontend ─────────────────────────────────────────────────────────────────
 echo "Starting frontend (Next.js on port 3000)..."
